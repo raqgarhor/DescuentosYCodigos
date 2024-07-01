@@ -1,6 +1,32 @@
 import { check } from 'express-validator'
 import { checkFileIsImage, checkFileMaxSize } from './FileValidationHelper.js'
-const maxFileSize = 2000000 // around 2Mb
+import { Restaurant } from '../../models/models.js' // around 2Mb
+import Sequelize from 'sequelize'
+const maxFileSize = 2000000
+
+/*
+The maximum number of characters of a discount code is 10.
+The discount is in the range [1, 99].
+The discount code cannot be repeated for restaurants owned by the same owner.
+*/
+// SOLUCIÓN
+const checkDiscountCodeOnlyOneRestaurant = async (value, ownerId) => {
+  const code = await Restaurant.count({ where: { discountCode: value, userId: ownerId } })
+  if (code >= 1) {
+    return Promise.reject(new Error('The discount code can only be apply in one restaurant.'))
+  } else {
+    return Promise.resolve()
+  }
+}
+
+const checkDiscountCodeOnlyOneRestaurantUpdate = async (value, ownerId, restaurantId) => {
+  const code = await Restaurant.count({ where: { discountCode: value, userId: ownerId, id: { [Sequelize.Op.ne]: restaurantId } } })
+  if (code >= 1) {
+    return Promise.reject(new Error('The discount code can only be apply in one restaurant.'))
+  } else {
+    return Promise.resolve()
+  }
+}
 
 const create = [
   check('name').exists().isString().isLength({ min: 1, max: 255 }).trim(),
@@ -24,7 +50,13 @@ const create = [
   }).withMessage('Please upload an image with format (jpeg, png).'),
   check('logo').custom((value, { req }) => {
     return checkFileMaxSize(req, 'logo', maxFileSize)
-  }).withMessage('Maximum file size of ' + maxFileSize / 1000000 + 'MB')
+  }).withMessage('Maximum file size of ' + maxFileSize / 1000000 + 'MB'),
+  // SOLUCIÓN
+  check('discountCode').optional({ nullable: true, checkFalsy: true }).isString().isLength({ min: 1, max: 10 }).trim(),
+  check('discount').optional({ nullable: true, checkFalsy: true }).isFloat({ min: 0, max: 99 }).toFloat(),
+  check('discountCode').custom((value, { req }) => {
+    return checkDiscountCodeOnlyOneRestaurant(value, req.user.id)
+  }).withMessage('Restaurant discount codes cannot repeat among restaurants of the same owner.')
 ]
 const update = [
   check('name').exists().isString().isLength({ min: 1, max: 255 }).trim(),
@@ -48,7 +80,13 @@ const update = [
   }).withMessage('Please upload an image with format (jpeg, png).'),
   check('logo').custom((value, { req }) => {
     return checkFileMaxSize(req, 'logo', maxFileSize)
-  }).withMessage('Maximum file size of ' + maxFileSize / 1000000 + 'MB')
+  }).withMessage('Maximum file size of ' + maxFileSize / 1000000 + 'MB'),
+  // SOLUCIÓN
+  check('discountCode').optional({ nullable: true, checkFalsy: true }).isString().isLength({ min: 1, max: 10 }).trim(),
+  check('discount').optional({ nullable: true, checkFalsy: true }).isFloat({ min: 0, max: 99 }).toFloat(),
+  check('discountCode').custom((value, { req }) => {
+    return checkDiscountCodeOnlyOneRestaurantUpdate(value, req.user.id, req.params.restaurantId)
+  }).withMessage('Restaurant discount codes cannot repeat among restaurants of the same owner.')
 ]
 
 export { create, update }

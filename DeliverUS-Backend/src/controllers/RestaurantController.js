@@ -25,6 +25,7 @@ const indexOwner = async function (req, res) {
       {
         attributes: { exclude: ['userId'] },
         where: { userId: req.user.id },
+        order: [['discount', 'DESC']],
         include: [{
           model: RestaurantCategory,
           as: 'restaurantCategory'
